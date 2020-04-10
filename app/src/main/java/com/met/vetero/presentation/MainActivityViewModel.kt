@@ -12,23 +12,26 @@ import kotlinx.coroutines.withContext
 
 class MainActivityViewModel(private val repository: WeatherRepository) : ViewModel() {
 
+    val TAG = this.javaClass.simpleName
     val weatherResponse = MutableLiveData<WeatherResponse>()
     val error = MutableLiveData<Throwable>()
 
     fun fetchWeatherForecast(lat : String, lon : String, apiKey : String) {
-        val scope = CoroutineScope(Dispatchers.Main).launch {
-            val result  = withContext(Dispatchers.IO) {
-                runCatching {
-                    repository.getForecast(lat, lon, apiKey)
+        if(weatherResponse.value == null) {
+            val scope = CoroutineScope(Dispatchers.Main).launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        repository.getForecast(lat, lon, apiKey)
+                    }
                 }
-            }
 
-            result.onSuccess {
-                Log.i("SUCCESS", "Weather info  : $it")
-                weatherResponse.value = it
-            }
-            result.onFailure { error.value = it }
+                result.onSuccess {
+                    Log.i("SUCCESS", "Weather info  : $it")
+                    weatherResponse.value = it
+                }
+                result.onFailure { error.value = it }
 
+            }
         }
     }
 
