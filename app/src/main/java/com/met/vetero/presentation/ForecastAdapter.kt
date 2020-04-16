@@ -26,8 +26,8 @@ class ForecastAdapter :
     override fun getItemCount(): Int = forecast.size
 
     override fun onBindViewHolder(holder: ForecastViewHolder, position: Int) {
-        if (position != 0)
-            holder.bind(forecast[position])
+        if(position+1 < forecast.size)
+            holder.bind(forecast[position+1])
     }
 
 

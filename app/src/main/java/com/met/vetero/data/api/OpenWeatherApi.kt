@@ -14,4 +14,19 @@ interface OpenWeatherApi {
         @Query("units") metric : String = "metric"
     ) : WeatherResponse
 
+    @GET("forecast")
+    suspend fun getWeatherByCityName(
+        @Query("q") cityName : String,
+        @Query("appid") appId : String,
+        @Query("lang") lang : String = "pl",
+        @Query("units") metric : String = "metric"
+    ) : WeatherResponse
+
+    @GET("forecast")
+    suspend fun getWeatherByCityId(
+        @Query("id") cityId : Int,
+        @Query("appid") appId : String,
+        @Query("lang") lang : String = "pl",
+        @Query("units") metric : String = "metric"
+    ) : WeatherResponse
 }

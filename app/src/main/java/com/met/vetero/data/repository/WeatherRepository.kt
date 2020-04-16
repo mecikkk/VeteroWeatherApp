@@ -9,4 +9,12 @@ class WeatherRepository(private val api : OpenWeatherApi) {
         return api.getWeatherByCoordinates(lat,lon,appid)
     }
 
+    suspend fun getForecast(cityName : String, appid: String) : WeatherResponse {
+        return api.getWeatherByCityName(cityName, appid)
+    }
+
+    suspend fun getForecast(cityId : Int, appid: String) : WeatherResponse {
+        return api.getWeatherByCityId(cityId, appid)
+    }
+
 }

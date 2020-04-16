@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Vetero</string>
+    <string name="celsius_degree" translatable="false">°C</string>
+    <string name="feels_like">Feels like</string>
+    <string name="pressure">Pressure</string>
+    <string name="humidity">Humidity</string>
+    <string name="cloudiness">Cloudiness</string>
+    <string name="no_internet_connection">No internet connection</string>
+    <string name="search">Search</string>
+    <string name="enter_city_name">Enter city name</string>
+    <string name="search_city">Search City</string>
+    <string name="no_access_to_gps">No access to GPS</string>
 </resources>
