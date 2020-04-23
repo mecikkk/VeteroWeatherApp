@@ -9,7 +9,7 @@ import org.koin.dsl.module
 
 val appModule = module {
 
-    factory { WeatherRepository(get())}
+    factory { WeatherRepository(get()) }
 
     factory { ForecastAdapter() }
 

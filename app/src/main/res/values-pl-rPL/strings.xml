@@ -10,4 +10,6 @@
     <string name="enter_city_name">Wprowadź miasto</string>
     <string name="search_city">Znajdź miasto</string>
     <string name="no_access_to_gps">Brak dostępu do GPS</string>
+    <string name="cannot_find_location">Nie znaleziono lokalizacji</string>
+    <string name="getting_forecast_error">Błąd przy pobieraniu prognozy</string>
 </resources>

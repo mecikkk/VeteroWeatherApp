@@ -1,12 +1,11 @@
 package com.met.vetero.presentation
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
+import android.content.DialogInterface
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
@@ -14,41 +13,37 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
-import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.airbnb.lottie.LottieAnimationView
 import com.bumptech.glide.Glide
-import com.google.android.material.button.MaterialButton
-import com.met.vetero.BuildConfig
+import com.google.android.material.snackbar.Snackbar
 import com.met.vetero.R
 import com.met.vetero.data.api.WeatherResponse
 import com.met.vetero.data.entities.City
+import com.met.vetero.utils.*
 import com.met.vetero.utils.Const.LOCATION_REQUEST
-import com.met.vetero.utils.NetworkConnection
 import kotlinx.android.synthetic.main.activity_main.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import org.koin.android.viewmodel.ext.android.viewModel
+import java.util.*
 
+@ExperimentalStdlibApi
 class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListener {
 
-    private val TAG = javaClass.simpleName
     private lateinit var networkConnection: NetworkConnection
     private val vm: MainActivityViewModel by viewModel()
     private val forecastAdapter: ForecastAdapter by inject()
-    private val dialogFragment = ConnectionFailedFragment.newInstance()
-    private val searchCityFragment : SearchCityFragment by lazy { SearchCityFragment.newInstance(vm) }
+    private val networkFailedFragment = ConnectionFailedFragment.newInstance()
+    private val searchCityFragment: SearchCityFragment by lazy { SearchCityFragment.newInstance() }
+    private val locationManager: LocationManager by lazy { getSystemService(Context.LOCATION_SERVICE) as LocationManager }
 
-    private val noGpsAlert : AlertDialog by lazy { initGpsAlertDialog() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,135 +54,141 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         initErrorObserver()
         initWeatherObserver()
         initGpsAlertDialog()
+        initLocationSourceObserver()
+        swipeRefreshListener()
 
-        main_activity_ready_layout.visibility = View.GONE
+        main_activity_ready_layout.gone()
+        main_content_progress_bar.visible()
 
         networkConnection = NetworkConnection(this, setNetworkCallback())
         vm.connectedToInternet = networkConnection.forceCheckNetworkState()
 
-        if (!vm.connectedToInternet) dialogFragment.show(supportFragmentManager.beginTransaction(), dialogFragment.tag)
-        Log.d(TAG, "Connected to internet : ${vm.connectedToInternet}")
+        if (!vm.connectedToInternet) networkFailedFragment.show(supportFragmentManager.beginTransaction(), networkFailedFragment.tag)
 
         initRecyclerView()
-
 
     }
 
     private fun checkLocationPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) getLocation()
-        else ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_REQUEST)
+        if (ContextCompat.checkSelfPermission(this,
+                    Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this,
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_REQUEST)
+        else registerLocationListener()
     }
 
     private fun setNetworkCallback() = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            Log.d(TAG, "Network Available")
             vm.connectedToInternet = true
-            if(dialogFragment.isVisible)
-                dialogFragment.dismiss()
+            if (networkFailedFragment.isVisible)
+                networkFailedFragment.dismiss()
+
             checkLocationPermission()
         }
 
         override fun onLost(network: Network) {
-            Log.e(TAG, "Lost connection...")
             vm.connectedToInternet = false
-
-            dialogFragment.show(supportFragmentManager.beginTransaction(), dialogFragment.tag)
+            networkFailedFragment.show(supportFragmentManager.beginTransaction(), networkFailedFragment.tag)
 
         }
 
         override fun onUnavailable() {
-            Log.e(TAG, "No connection available...")
             vm.connectedToInternet = false
-
-            dialogFragment.show(supportFragmentManager.beginTransaction(), dialogFragment.tag)
-
-        }
-
-        override fun onLosing(network: Network, maxMsToLive: Int) {
-            super.onLosing(network, maxMsToLive)
-            Log.e(TAG, "Losing connection...")
-
+            networkFailedFragment.show(supportFragmentManager.beginTransaction(), networkFailedFragment.tag)
         }
     }
 
-
-    private fun getLocation() {
-        Log.d(TAG, "Getting localization")
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val providers = locationManager.getProviders(true)
-
-            var lastLocation: Location? = null
-
-
-            providers.forEach {
-                val location: Location? = locationManager.getLastKnownLocation(it)
-
-                if (location != null && (lastLocation == null || (location.accuracy < lastLocation!!.accuracy))) lastLocation = location
-
-            }
-
-            if(locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER))
-                vm.fetchWeatherForecast(lastLocation?.latitude.toString(), lastLocation?.longitude.toString(), BuildConfig.API_KEY)
-            else
-                showNoGPSInfo()
-
-        } else
-            showNoGPSInfo()
-
-
-    }
-
-    private fun showNoGPSInfo() {
-        Log.e(TAG, "Showing no gps info")
-
-        if(!noGpsAlert.isShowing)
-            noGpsAlert.show()
-
-    }
-
-    private fun initGpsAlertDialog() : AlertDialog {
-        val alertDialog = AlertDialog.Builder(this)
-        val alertView = layoutInflater.inflate(R.layout.gps_disabled_alert, null)
-        alertDialog.setView(alertView)
-
-        alertView.findViewById<LottieAnimationView>(R.id.lottie_location_anim)
-                .playAnimation()
-
-        val noGpsAlert = alertDialog.create()
-
-        searchCityFragment.onCitySelectListener = this
-        searchCityFragment.thisActivity = this@MainActivity
-
-        alertView.findViewById<MaterialButton>(R.id.search_city_button)
-                .setOnClickListener {
-                    searchCityFragment.show(supportFragmentManager, searchCityFragment.tag)
-                    noGpsAlert.dismiss()
+    private fun locationListener(): LocationListener = object : LocationListener {
+        override fun onLocationChanged(location: Location?) {
+            if (location != null) {
+                MainScope().launch {
+                    my_location_image_view.visible()
                 }
-
-
-        noGpsAlert.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        noGpsAlert.setCanceledOnTouchOutside(false)
-        noGpsAlert.setOnCancelListener {
-            finish()
-            System.exit(0)
+                vm.fetchWeatherForecast(location.latitude.toString(), location.longitude.toString())
+            }
         }
-        return noGpsAlert
+
+        override fun onStatusChanged(
+            provider: String?,
+            status: Int,
+            extras: Bundle?
+        ) {
+
+        }
+
+        override fun onProviderEnabled(provider: String?) {
+            MainScope().launch { main_content_progress_bar.visible() }
+        }
+
+        override fun onProviderDisabled(provider: String?) {
+            showSnackbar(R.string.no_access_to_gps)
+            MainScope().launch { main_content_progress_bar.gone() }
+            getStoredCityOrShowSearchFragment()
+        }
+
+    }
+
+    private fun showSnackbar(stringId: Int) {
+        val snackbar = Snackbar.make(main_activity_container, getString(stringId), Snackbar.LENGTH_LONG)
+        snackbar.view.setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.colorAccent))
+        snackbar.show()
+    }
+
+    private fun getStoredCityOrShowSearchFragment() {
+        val cityId = vm.getStoredLocation(getPreferences(Context.MODE_PRIVATE))
+        if (cityId == -1) showOrHideNoGPSInfo(false)
+        else {
+            MainScope().launch {
+                main_content_progress_bar.visible()
+            }
+            vm.fetchWeatherForecast(cityId)
+        }
+    }
+
+    private fun showOrHideNoGPSInfo(hide: Boolean) {
+
+        MainScope().launch {
+            if (!hide) {
+                gps_disabled_layout.visible()
+                main_activity_ready_layout.fadeOut(Runnable {
+                    main_activity_ready_layout.gone()
+                })
+                gps_disabled_layout.fadeIn()
+            } else {
+                main_activity_ready_layout.visible()
+                gps_disabled_layout.fadeOut(Runnable {
+                    gps_disabled_layout.gone()
+                })
+                main_activity_ready_layout.fadeIn()
+            }
+        }
+
+    }
+
+    private fun initGpsAlertDialog() {
+        search_city_button.setOnClickListener {
+            searchCityFragment.show(supportFragmentManager, searchCityFragment.tag)
+        }
     }
 
 
-    @SuppressLint("ShowToast")
+    private fun initLocationSourceObserver(){
+        vm.locationFromGps.observe(this, Observer {
+            if(it) my_location_image_view.visible()
+            else my_location_image_view.gone()
+        })
+    }
+
     private fun initErrorObserver() {
         vm.apiError.observe(this, Observer {
-            Toast.makeText(this@MainActivity, "Getting forecast error...", Toast.LENGTH_LONG)
-                    .show()
-            Log.e(this@MainActivity.javaClass.simpleName, "Error : $it")
+            swipe_refresh_layout.isRefreshing = false
+            showSnackbar(R.string.getting_forecast_error)
         })
     }
 
     private fun initWeatherObserver() {
         vm.weatherResponse.observe(this, Observer {
+            showOrHideNoGPSInfo(true)
+            swipe_refresh_layout.isRefreshing = false
             updateUi(it)
         })
     }
@@ -199,10 +200,21 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         }
     }
 
+    private fun swipeRefreshListener() {
+        swipe_refresh_layout.setOnRefreshListener {
+            if (locationManager.isGpsEnabled()) registerLocationListener()
+            else swipe_refresh_layout.isRefreshing = false
+        }
+    }
+
     private fun updateUi(weather: WeatherResponse) {
+        main_content_progress_bar.gone()
+
+        if (networkFailedFragment.isVisible) networkFailedFragment.dismiss()
+
         city_name.text = weather.city.name
         temperature.text = String.format("%.0f°C", weather.forecastList[0].temperature.current)
-        weather_name.text = weather.forecastList[0].weather[0].description.capitalize()
+        weather_name.text = weather.forecastList[0].weather[0].description.capitalize(Locale.getDefault())
         temp_feels_like.text = String.format("%s : %.0f°C", getString(R.string.feels_like), weather.forecastList[0].temperature.feelsLike)
         pressure.text = String.format("%s : %s hPa", getString(R.string.pressure), weather.forecastList[0].temperature.pressure.toString())
         humidity.text = String.format("%s : %s %%", getString(R.string.humidity), weather.forecastList[0].temperature.humidity.toString())
@@ -216,19 +228,23 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         forecastAdapter.forecast = weather.forecastList
         forecastAdapter.notifyDataSetChanged()
 
-        main_activity_ready_layout.visibility = View.VISIBLE
-
-        main_activity_ready_layout.animate()
-                .alpha(1f)
-                .setDuration(250)
-                .start()
+        showOrHideNoGPSInfo(true)
     }
 
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         when (requestCode) {
             LOCATION_REQUEST -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) getLocation()
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    if(networkFailedFragment.isVisible)
+                        networkFailedFragment.dismiss()
+
+                    registerLocationListener()
+                }
             }
         }
     }
@@ -240,38 +256,36 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
 
-        when(item.itemId){
+        when (item.itemId) {
             R.id.find_city_menu_item -> searchCityFragment.show(supportFragmentManager, searchCityFragment.tag)
 
         }
         return true
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onStart() {
+        super.onStart()
         networkConnection.registerCallback()
-
     }
 
-    override fun onBackPressed() {
-        super.onBackPressed()
-        Log.d(TAG, "CLICKED BACK BUTTON")
-        finish()
-        System.exit(0)
+    private fun registerLocationListener() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 10000.0f, locationListener())
+        }
     }
 
-    override fun onPause() {
-        super.onPause()
-        //dialogFragment.dismiss()
-        //noGpsAlert.dismiss()
+    override fun onStop() {
+        super.onStop()
         networkConnection.unregisterCallback()
+        locationManager.removeUpdates(locationListener())
     }
 
     override fun onCitySelected(city: City) {
-        Log.d(TAG, "Received city : ${city.name}")
-        main_activity_ready_layout.visibility = View.VISIBLE
-        vm.fetchWeatherForecast(city.id, BuildConfig.API_KEY)
-        noGpsAlert.dismiss()
+        main_content_progress_bar.visible()
+        main_activity_ready_layout.visible()
+        vm.fetchWeatherForecast(city.id)
+        vm.storeLocationInSharedPreferences(getPreferences(Context.MODE_PRIVATE), city.id)
+        showOrHideNoGPSInfo(true)
         searchCityFragment.dismiss()
     }
 }

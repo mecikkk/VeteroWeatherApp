@@ -18,18 +18,19 @@ val apiModule = module {
 
     single {
         OkHttpClient.Builder()
-            .addInterceptor(get<Interceptor>())
-            .build()
+                .addInterceptor(get<Interceptor>())
+                .build()
     }
 
     single {
-        val gson = GsonBuilder().setDateFormat("yyyy-MM-dd HH:mm:ss").create()
+        val gson = GsonBuilder().setDateFormat("yyyy-MM-dd HH:mm:ss")
+                .create()
 
         Retrofit.Builder()
-            .baseUrl("https://api.openweathermap.org/data/2.5/")
-            .addConverterFactory(GsonConverterFactory.create(gson))
-            .client(get<OkHttpClient>())
-            .build()
+                .baseUrl("https://api.openweathermap.org/data/2.5/")
+                .addConverterFactory(GsonConverterFactory.create(gson))
+                .client(get<OkHttpClient>())
+                .build()
     }
 
     single {
