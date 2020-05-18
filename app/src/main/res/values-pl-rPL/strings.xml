@@ -12,4 +12,5 @@
     <string name="no_access_to_gps">Brak dostępu do GPS</string>
     <string name="cannot_find_location">Nie znaleziono lokalizacji</string>
     <string name="getting_forecast_error">Błąd przy pobieraniu prognozy</string>
+    <string name="wind_speed">Prędkość wiatru</string>
 </resources>

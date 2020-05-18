@@ -5,7 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.met.vetero.R
-import com.met.vetero.data.entities.City
+import com.met.vetero.data.room.City
 import kotlinx.android.synthetic.main.search_item.view.*
 
 class SearchAdapter() : RecyclerView.Adapter<SearchAdapter.SearchViewHolder>() {

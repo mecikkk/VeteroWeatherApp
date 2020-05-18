@@ -1,19 +1,23 @@
 package com.met.vetero.presentation
 
 import android.app.Activity
+import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.room.Room
+import com.google.gson.Gson
+import com.google.gson.stream.JsonReader
 import com.met.vetero.data.api.WeatherResponse
-import com.met.vetero.data.entities.City
-import com.met.vetero.data.entities.Coord
 import com.met.vetero.data.repository.WeatherRepository
+import com.met.vetero.data.room.CitiesDatabase
+import com.met.vetero.data.room.City
+import com.met.vetero.data.room.CityDao
 import com.met.vetero.utils.Const
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
 import java.io.InputStreamReader
 
 class MainActivityViewModel(private val repository: WeatherRepository) : ViewModel() {
@@ -23,7 +27,10 @@ class MainActivityViewModel(private val repository: WeatherRepository) : ViewMod
     val allCities = MutableLiveData<List<City>>()
     val locationFromGps = MutableLiveData<Boolean>()
     val apiError = MutableLiveData<Throwable>()
+    var isGpsModeOn = false
     var connectedToInternet = false
+    private var db: CitiesDatabase? = null
+    private var dao: CityDao? = null
 
     fun fetchWeatherForecast(
         lat: String,
@@ -68,39 +75,52 @@ class MainActivityViewModel(private val repository: WeatherRepository) : ViewMod
         query: String
     ) {
         val listOfCities = mutableListOf<City>()
+        db = Room.databaseBuilder(activity, CitiesDatabase::class.java, "cities_database")
+                .build()
+        dao = db?.cityDao()
 
         withContext(Dispatchers.IO) {
-
-            val inputStream = activity.applicationContext.assets.open("city.list.json")
-            val bufferReader = BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8))
-
-            val allLines = bufferReader.readLines()
-
-            inputStream.close()
-            bufferReader.close()
-
-            var i = 0
-            allLines.forEach {
-                if (it.contains(query, true)) {
-                    val id = allLines[i - 1].substringAfter("\"id\": ")
-                            .substringBefore(",")
-                            .toInt()
-                    val name = allLines[i].substringAfter("\"name\": \"")
-                            .substringBefore("\",")
-                    val country = allLines[i + 2].substringAfter("\"country\": \"")
-                            .substringBefore("\",")
-                    val lon = allLines[i + 4].substringAfter("\"lon\": ")
-                            .substringBefore(",")
-                    val lat = allLines[i + 5].substringAfter("\"lat\": ")
-                    listOfCities.add(City(id = id, name = name, coord = Coord(lat, lon), country = country))
-                }
-                i++
-            }
-
+            listOfCities.addAll(dao!!.findCityByName(query))
         }
 
         withContext(Dispatchers.Main) {
             allCities.value = listOfCities
+        }
+        db?.close()
+    }
+
+    suspend fun createDatabaseIfNotExist(
+        context: Context,
+        sp: SharedPreferences
+    ) {
+        db = Room.databaseBuilder(context, CitiesDatabase::class.java, "cities_database")
+                .build()
+        dao = db?.cityDao()
+
+        if (!sp.getBoolean(Const.SHARED_PREF_DATABASE_EXIST, false)) {
+
+            val editor = sp.edit()
+            editor.putBoolean(Const.SHARED_PREF_DATABASE_EXIST, true)
+            editor.apply()
+
+            withContext(Dispatchers.IO) {
+
+                val inputStream = context.assets.open("city.list.json")
+
+                val reader = JsonReader(InputStreamReader(inputStream, Charsets.UTF_8))
+
+                reader.beginArray()
+
+                while (reader.hasNext()) {
+                    val singleCity = Gson().fromJson<City>(reader, City::class.java)
+                    dao?.insertCity(singleCity)
+                }
+                reader.endArray()
+                reader.close()
+                inputStream.close()
+            }
+
+            db?.close()
         }
     }
 
@@ -113,8 +133,6 @@ class MainActivityViewModel(private val repository: WeatherRepository) : ViewMod
         editor.apply()
     }
 
-    fun getStoredLocation(sp: SharedPreferences): Int = sp.getInt(Const.SHARED_PREF_SAVED_LOCATION, -1)
+    fun getLocationFromSharedPreferences(sp: SharedPreferences): Int = sp.getInt(Const.SHARED_PREF_SAVED_LOCATION, -1)
 
 }
-
-

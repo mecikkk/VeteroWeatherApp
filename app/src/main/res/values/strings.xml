@@ -12,4 +12,5 @@
     <string name="no_access_to_gps">No access to GPS</string>
     <string name="cannot_find_location">Cannot find the location</string>
     <string name="getting_forecast_error">Getting forecast error</string>
+    <string name="wind_speed">Wind speed</string>
 </resources>

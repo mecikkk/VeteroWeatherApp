@@ -12,7 +12,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.met.vetero.R
-import com.met.vetero.data.entities.City
+import com.met.vetero.data.room.City
 import com.met.vetero.utils.SimpleTextWatcher
 import kotlinx.android.synthetic.main.fragment_search_city.*
 import kotlinx.android.synthetic.main.fragment_search_city.view.*
@@ -30,7 +30,6 @@ class SearchCityFragment() : BottomSheetDialogFragment() {
         fun newInstance() = SearchCityFragment()
     }
 
-    private val TAG = javaClass.simpleName
     private lateinit var bottomSheetView: View
     private lateinit var behavior: BottomSheetBehavior<View>
     private val searchAdapter: SearchAdapter by inject()
@@ -85,14 +84,14 @@ class SearchCityFragment() : BottomSheetDialogFragment() {
         }
     }
 
-    fun initResponseObserver() {
+    private fun initResponseObserver() {
         vModel.city.observe(this, Observer {
             searchAdapter.cities = mutableListOf(it)
             searchAdapter.notifyDataSetChanged()
         })
     }
 
-    fun initCitiesObserver() {
+    private fun initCitiesObserver() {
         vModel.allCities.observe(this, Observer {
             searchAdapter.cities = it.toMutableList()
             searchAdapter.notifyDataSetChanged()

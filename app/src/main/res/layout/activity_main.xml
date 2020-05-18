@@ -11,10 +11,10 @@
         android:id="@+id/main_content_progress_bar"
         style="@style/Widget.AppCompat.ProgressBar.Horizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="5dp"
         android:indeterminate="true"
         android:indeterminateTint="@android:color/white"
-        android:visibility="gone"
+        android:visibility="visible"
         app:layout_constraintTop_toTopOf="parent" />
 
     <androidx.constraintlayout.widget.ConstraintLayout
@@ -116,9 +116,9 @@
                             android:id="@+id/city_name"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
                             android:layout_marginTop="24dp"
                             android:layout_marginEnd="24dp"
-                            android:layout_marginStart="16dp"
                             android:textColor="@android:color/white"
                             android:textSize="20sp"
                             android:textStyle="bold"
@@ -132,9 +132,32 @@
                             android:layout_height="24dp"
                             android:layout_marginStart="8dp"
                             android:src="@drawable/ic_location"
-                            app:layout_constraintTop_toTopOf="@id/city_name"
                             app:layout_constraintBottom_toBottomOf="@id/city_name"
-                            app:layout_constraintStart_toEndOf="@id/city_name"/>
+                            app:layout_constraintStart_toEndOf="@id/city_name"
+                            app:layout_constraintTop_toTopOf="@id/city_name" />
+
+                        <ImageView
+                            android:id="@+id/wind_direction_image_view"
+                            android:layout_width="14dp"
+                            android:layout_height="14dp"
+                            android:src="@drawable/ic_wind_direction"
+                            android:tint="@color/colorAccent"
+                            app:layout_constraintBottom_toTopOf="@id/temperature"
+                            app:layout_constraintStart_toStartOf="@id/city_name"
+                            app:layout_constraintTop_toBottomOf="@id/city_name" />
+
+                        <TextView
+                            android:id="@+id/wind_description_text_view"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="end"
+                            android:layout_marginStart="8dp"
+                            android:textColor="@android:color/white"
+                            android:textSize="14sp"
+                            app:layout_constraintTop_toTopOf="@id/wind_direction_image_view"
+                            app:layout_constraintStart_toEndOf="@id/wind_direction_image_view"
+                            app:layout_constraintBottom_toBottomOf="@id/wind_direction_image_view"
+                            tools:text="Wind description" />
 
                         <TextView
                             android:id="@+id/temperature"
@@ -146,7 +169,7 @@
                             android:textStyle="bold"
                             app:layout_constraintBottom_toBottomOf="parent"
                             app:layout_constraintLeft_toLeftOf="parent"
-                            app:layout_constraintTop_toBottomOf="@id/city_name"
+                            app:layout_constraintTop_toBottomOf="@id/wind_direction_image_view"
                             tools:text="16 C" />
 
                         <ImageView

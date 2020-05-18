@@ -1,9 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-<item
-    android:id="@+id/find_city_menu_item"
-    app:showAsAction="always"
-    android:icon="@drawable/ic_search"
-    android:title="@string/search"/>
+    <item
+        android:id="@+id/turn_on_gps_menu_item"
+        android:icon="@drawable/ic_location"
+        android:title="@string/search"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/find_city_menu_item"
+        android:icon="@drawable/ic_search"
+        android:title="@string/search"
+        app:showAsAction="always" />
+
 </menu>

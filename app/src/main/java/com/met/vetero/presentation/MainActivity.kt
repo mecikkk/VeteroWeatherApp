@@ -2,7 +2,6 @@ package com.met.vetero.presentation
 
 import android.Manifest
 import android.content.Context
-import android.content.DialogInterface
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
@@ -10,21 +9,19 @@ import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Bundle
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bumptech.glide.Glide
 import com.google.android.material.snackbar.Snackbar
 import com.met.vetero.R
 import com.met.vetero.data.api.WeatherResponse
-import com.met.vetero.data.entities.City
+import com.met.vetero.data.room.City
 import com.met.vetero.utils.*
 import com.met.vetero.utils.Const.LOCATION_REQUEST
 import kotlinx.android.synthetic.main.activity_main.*
@@ -44,12 +41,16 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
     private val searchCityFragment: SearchCityFragment by lazy { SearchCityFragment.newInstance() }
     private val locationManager: LocationManager by lazy { getSystemService(Context.LOCATION_SERVICE) as LocationManager }
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+
+        MainScope().launch {
+            vm.createDatabaseIfNotExist(this@MainActivity, getPreferences(Context.MODE_PRIVATE))
+        }
+
 
         initErrorObserver()
         initWeatherObserver()
@@ -73,14 +74,13 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         if (ContextCompat.checkSelfPermission(this,
                     Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) ActivityCompat.requestPermissions(this,
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), LOCATION_REQUEST)
-        else registerLocationListener()
+        else updateLocation()
     }
 
     private fun setNetworkCallback() = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             vm.connectedToInternet = true
-            if (networkFailedFragment.isVisible)
-                networkFailedFragment.dismiss()
+            if (networkFailedFragment.isVisible) networkFailedFragment.dismiss()
 
             checkLocationPermission()
         }
@@ -134,8 +134,8 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
     }
 
     private fun getStoredCityOrShowSearchFragment() {
-        val cityId = vm.getStoredLocation(getPreferences(Context.MODE_PRIVATE))
-        if (cityId == -1) showOrHideNoGPSInfo(false)
+        val cityId = vm.getLocationFromSharedPreferences(getPreferences(Context.MODE_PRIVATE))
+        if (cityId == -1) showOrHideGpsDisabledInfo(false)
         else {
             MainScope().launch {
                 main_content_progress_bar.visible()
@@ -144,7 +144,7 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         }
     }
 
-    private fun showOrHideNoGPSInfo(hide: Boolean) {
+    private fun showOrHideGpsDisabledInfo(hide: Boolean) {
 
         MainScope().launch {
             if (!hide) {
@@ -171,10 +171,16 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
     }
 
 
-    private fun initLocationSourceObserver(){
+    private fun initLocationSourceObserver() {
         vm.locationFromGps.observe(this, Observer {
-            if(it) my_location_image_view.visible()
-            else my_location_image_view.gone()
+            if (it) {
+                vm.isGpsModeOn = true
+                my_location_image_view.visible()
+            }
+            else {
+                vm.isGpsModeOn = false
+                my_location_image_view.gone()
+            }
         })
     }
 
@@ -187,7 +193,7 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
 
     private fun initWeatherObserver() {
         vm.weatherResponse.observe(this, Observer {
-            showOrHideNoGPSInfo(true)
+            showOrHideGpsDisabledInfo(true)
             swipe_refresh_layout.isRefreshing = false
             updateUi(it)
         })
@@ -202,8 +208,16 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
 
     private fun swipeRefreshListener() {
         swipe_refresh_layout.setOnRefreshListener {
-            if (locationManager.isGpsEnabled()) registerLocationListener()
-            else swipe_refresh_layout.isRefreshing = false
+            if (vm.isGpsModeOn) updateLocation()
+            else {
+                getStoredCityOrShowSearchFragment()
+            }
+        }
+    }
+
+    private fun updateLocation() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 10000.0f, locationListener())
         }
     }
 
@@ -221,6 +235,9 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         cloudiness.text =
             String.format("%s : %s %%", getString(R.string.cloudiness), weather.forecastList[0].clouds.cloudinessLevel.toString())
 
+        wind_description_text_view.text = String.format("%s : %.1f m/s", getString(R.string.wind_speed), weather.forecastList[0].wind.speed)
+        wind_direction_image_view.rotation = weather.forecastList[0].wind.deg.toFloat() - 90f
+
         Glide.with(this)
                 .load("https://openweathermap.org/img/wn/${weather.forecastList[0].weather[0].iconId}@2x.png")
                 .into(icon_weather)
@@ -228,7 +245,7 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         forecastAdapter.forecast = weather.forecastList
         forecastAdapter.notifyDataSetChanged()
 
-        showOrHideNoGPSInfo(true)
+        showOrHideGpsDisabledInfo(true)
     }
 
 
@@ -240,10 +257,9 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         when (requestCode) {
             LOCATION_REQUEST -> {
                 if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    if(networkFailedFragment.isVisible)
-                        networkFailedFragment.dismiss()
+                    if (networkFailedFragment.isVisible) networkFailedFragment.dismiss()
 
-                    registerLocationListener()
+                    updateLocation()
                 }
             }
         }
@@ -257,7 +273,14 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
 
         when (item.itemId) {
-            R.id.find_city_menu_item -> searchCityFragment.show(supportFragmentManager, searchCityFragment.tag)
+            R.id.find_city_menu_item -> {
+                vm.isGpsModeOn = false
+                searchCityFragment.show(supportFragmentManager, searchCityFragment.tag)
+            }
+            R.id.turn_on_gps_menu_item -> {
+                vm.isGpsModeOn = true
+                updateLocation()
+            }
 
         }
         return true
@@ -266,12 +289,6 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
     override fun onStart() {
         super.onStart()
         networkConnection.registerCallback()
-    }
-
-    private fun registerLocationListener() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 10000.0f, locationListener())
-        }
     }
 
     override fun onStop() {
@@ -285,7 +302,7 @@ class MainActivity : AppCompatActivity(), SearchCityFragment.OnCitySelectListene
         main_activity_ready_layout.visible()
         vm.fetchWeatherForecast(city.id)
         vm.storeLocationInSharedPreferences(getPreferences(Context.MODE_PRIVATE), city.id)
-        showOrHideNoGPSInfo(true)
+        showOrHideGpsDisabledInfo(true)
         searchCityFragment.dismiss()
     }
 }
